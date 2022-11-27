@@ -1,4 +1,4 @@
-#include <windows.h>
+ï»¿#include <windows.h>
 
 #include <process.h>
 #include <stdbool.h>
@@ -103,14 +103,32 @@ struct inputdata
 }InputData;
 static const int InputDataSize = sizeof(inputdata);
 
-struct outputdata_dasi
+struct rgb
+{
+    unsigned char R;
+    unsigned char G;
+    unsigned char B;
+};
+
+struct outputdata_dasi_1
 {
     unsigned char Address;
-    unsigned char Touch[48];
-    unsigned char Reader[3];
-    unsigned char Empty[11];
-}OutputDataDasi;
-static const int OutputDataSize_Dasi = sizeof(outputdata_dasi);
+    unsigned char Index;
+    struct rgb TouchArea[20];
+} OutputDataDasi1;
+static const int OutputDataSize_Dasi1 = sizeof(outputdata_dasi_1);
+
+struct outputdata_dasi_2
+{
+    unsigned char Address;
+    unsigned char Index;
+    struct rgb TouchArea[11];
+    struct rgb LeftAir;
+    struct rgb RightAir;
+    struct rgb CardReader;
+    unsigned char Empty[18];
+}OutputDataDasi2;
+static const int OutputDataSize_Dasi2 = sizeof(outputdata_dasi_2);
 struct outputdata_gaosan
 {
     unsigned char Address;
@@ -153,6 +171,10 @@ void DelayInit(uint8_t delay)
 
 int HIDUSB_Init(void)
 {
+    // zero out the buffers
+    memset(&OutputDataDasi1, 0, sizeof(outputdata_dasi_1));
+    memset(&OutputDataDasi2, 0, sizeof(outputdata_dasi_2));
+
     ULONG                     requiredLength;
     GUID                      hidGuid;
     SP_DEVICE_INTERFACE_DATA  devInfoData;
@@ -187,18 +209,18 @@ int HIDUSB_Init(void)
     {
         result = SetupDiEnumInterfaceDevice(hDevInfo, 0, &hidGuid, deviceNo, &devInfoData);
 
-        if ((result == false) || (GetLastError() == ERROR_NO_MORE_ITEMS)) {    /* ³öÏÖERROR_NO_MORE_ITEMS´íÎó±íÊ¾ÒÑ¾­ÕÒÍêÁËËùÓĞµÄÉè±¸ */
+        if ((result == false) || (GetLastError() == ERROR_NO_MORE_ITEMS)) {    /* å‡ºç°ERROR_NO_MORE_ITEMSé”™è¯¯è¡¨ç¤ºå·²ç»æ‰¾å®Œäº†æ‰€æœ‰çš„è®¾å¤‡ */
             //dprintf("USB- Can not Find ZhouSensor ChuniTouchPad \r\n\r\n");
             WriteConsole(hStdOut, WC(L"\rUSB- Can not Find ZhouSensor ChuniTouchPad"), NULL, NULL);
             SetupDiDestroyDeviceInfoList(hDevInfo);
             return 1;
         }
 
-        requiredLength = 0;                                                                                       /* ÏÈ½«±äÁ¿ÖÃÁã£¬ÒÔ±ãÓÚÏÂÒ»²½½øĞĞ»ñÈ¡ */
-        SetupDiGetInterfaceDeviceDetail(hDevInfo, &devInfoData, NULL, 0, &requiredLength, NULL);                  /* µÚÒ»´Îµ÷ÓÃ£¬ÎªÁË»ñÈ¡requiredLength */
-        PSP_INTERFACE_DEVICE_DETAIL_DATA devDetail = (SP_INTERFACE_DEVICE_DETAIL_DATA*)malloc(requiredLength);   /* ¸ù¾İ»ñÈ¡µ½µÄ³¤¶ÈÉêÇë¶¯Ì¬ÄÚ´æ */
-        devDetail->cbSize = sizeof(SP_INTERFACE_DEVICE_DETAIL_DATA);                                              /* ÏÈ¶Ô±äÁ¿½øĞĞ²¿·Ö³õÊ¼»¯ */
-        result = SetupDiGetInterfaceDeviceDetail(hDevInfo, &devInfoData, devDetail, requiredLength, NULL, NULL);  /* µÚ¶ş´Îµ÷ÓÃ£¬ÎªÁË»ñÈ¡devDetail */
+        requiredLength = 0;                                                                                       /* å…ˆå°†å˜é‡ç½®é›¶ï¼Œä»¥ä¾¿äºä¸‹ä¸€æ­¥è¿›è¡Œè·å– */
+        SetupDiGetInterfaceDeviceDetail(hDevInfo, &devInfoData, NULL, 0, &requiredLength, NULL);                  /* ç¬¬ä¸€æ¬¡è°ƒç”¨ï¼Œä¸ºäº†è·å–requiredLength */
+        PSP_INTERFACE_DEVICE_DETAIL_DATA devDetail = (SP_INTERFACE_DEVICE_DETAIL_DATA*)malloc(requiredLength);   /* æ ¹æ®è·å–åˆ°çš„é•¿åº¦ç”³è¯·åŠ¨æ€å†…å­˜ */
+        devDetail->cbSize = sizeof(SP_INTERFACE_DEVICE_DETAIL_DATA);                                              /* å…ˆå¯¹å˜é‡è¿›è¡Œéƒ¨åˆ†åˆå§‹åŒ– */
+        result = SetupDiGetInterfaceDeviceDetail(hDevInfo, &devInfoData, devDetail, requiredLength, NULL, NULL);  /* ç¬¬äºŒæ¬¡è°ƒç”¨ï¼Œä¸ºäº†è·å–devDetail */
 
         //PSP_INTERFACE_DEVICE_DETAIL_DATA devDetail =NULL;
         //result = false;
@@ -215,7 +237,7 @@ int HIDUSB_Init(void)
 
         free(devDetail);
 
-        if (hidHandle == INVALID_HANDLE_VALUE) {                               /* ÏµÍ³»á½«²¿·ÖHIDÉè±¸ÉèÖÃ³É¶ÀÕ¼Ä£Ê½ */
+        if (hidHandle == INVALID_HANDLE_VALUE) {                               /* ç³»ç»Ÿä¼šå°†éƒ¨åˆ†HIDè®¾å¤‡è®¾ç½®æˆç‹¬å æ¨¡å¼ */
             ++deviceNo;
             CloseHandle(hidHandle);
             continue;
@@ -223,7 +245,7 @@ int HIDUSB_Init(void)
 
         _HIDD_ATTRIBUTES hidAttributes;
 
-        result = HidD_GetAttributes(hidHandle, &hidAttributes);                /* »ñÈ¡HIDÉè±¸µÄÊôĞÔ */
+        result = HidD_GetAttributes(hidHandle, &hidAttributes);                /* è·å–HIDè®¾å¤‡çš„å±æ€§ */
 
         if (result == false) {
             ++deviceNo;
@@ -404,25 +426,54 @@ int HIDUSB_SetLedValue(uint8_t* p_buff)//96input
         break;
 
     case DASI:
-        OutputDataDasi.Address = 0;
-
-        for (int i = 0; i < 16; i++)
+        // å‰20å€‹ç‡ˆ
+        OutputDataDasi1.Address = 0;
+        OutputDataDasi1.Index = 0;
+        for (int i = 0; i < 20; i++)
         {
-            OutputDataDasi.Touch[i * 3] = (p_buff[i * 6 + 0] >> 4) | (p_buff[i * 6 + 1] & 0xF0);
-            OutputDataDasi.Touch[i * 3 + 1] = (p_buff[i * 6 + 2] >> 4) | (p_buff[i * 6 + 3] & 0xF0);
-            OutputDataDasi.Touch[i * 3 + 2] = (p_buff[i * 6 + 4] >> 4) | (p_buff[i * 6 + 5] & 0xF0);
+            auto light = OutputDataDasi1.TouchArea[i];
+            light.R = p_buff[i * 3];
+            light.G = p_buff[i * 3 + 1];
+            light.B = p_buff[i * 3 + 2];
         }
 
-        if (WriteFile(hidHandle, (unsigned char*)&OutputDataDasi, OutputDataSize_Dasi, &nothing, NULL) == false)
+        // å¾Œ11å€‹ç‡ˆ
+        OutputDataDasi2.Address = 0;
+        OutputDataDasi2.Index = 1;
+        for (int i = 0; i < 11; i++)
+        {
+            auto light = OutputDataDasi2.TouchArea[i];
+
+            auto buffOffset = i + 20;
+            light.R = p_buff[buffOffset * 3];
+            light.G = p_buff[buffOffset * 3 + 1];
+            light.B = p_buff[buffOffset * 3 + 2];
+        }
+
+        // air sensor: seems to be shared for both?
+        // LeftAir
+        OutputDataDasi2.LeftAir.R = p_buff[93];
+        OutputDataDasi2.LeftAir.G = p_buff[94];
+        OutputDataDasi2.LeftAir.B = p_buff[95];
+        // RightAir
+        OutputDataDasi2.RightAir.R = p_buff[93];
+        OutputDataDasi2.RightAir.G = p_buff[94];
+        OutputDataDasi2.RightAir.B = p_buff[95];
+
+        // CardReader RGB is set by HIDUSB_SetReaderLED
+
+        if (WriteFile(hidHandle, (unsigned char*)&OutputDataDasi1, OutputDataSize_Dasi1, &nothing, NULL) == false)
+        {
+            printf("WriteData Error");
+            error_count++;
+        }
+        if (WriteFile(hidHandle, (unsigned char*)&OutputDataDasi2, OutputDataSize_Dasi2, &nothing, NULL) == false)
         {
             printf("WriteData Error");
             error_count++;
         }
         break;
     }
-    
-
-    
 
     return 0;
 }
@@ -433,20 +484,17 @@ int HIDUSB_SetReaderLED(uint8_t* p_buff)
     if (ControllerType != DASI)
         return 0;
 
-    int i;
     if (p_buff[0] < READERLESS && p_buff[1] < READERLESS && p_buff[2] < READERLESS)
     {
-        for (i = 0; i < 3; i++)
-        {
-            OutputDataDasi.Reader[i] = READERLESS;
-        }
+        OutputDataDasi2.CardReader.R = READERLESS;
+        OutputDataDasi2.CardReader.G = READERLESS;
+        OutputDataDasi2.CardReader.B = READERLESS;
     }
     else
     {
-        for (i = 0; i < 3; i++)
-        {
-            OutputDataDasi.Reader[i] = p_buff[i];
-        }
+        OutputDataDasi2.CardReader.R = p_buff[0];
+        OutputDataDasi2.CardReader.G = p_buff[1];
+        OutputDataDasi2.CardReader.B = p_buff[2];
     }
     
     return 0;

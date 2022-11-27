@@ -127,9 +127,11 @@ static int irledcount = 0;
 #define irmaxcount 255
 void chuni_io_slider_set_leds(const uint8_t *rgb)
 {
-    unsigned char RGB[96];
-    int i;
-    for (i = 0; i < 31; i++)
+    unsigned char RGB[96] = { 0 };
+
+    // RBG -> RGB?
+    // TODO: check out what this does
+    for (int i = 0; i < 31; i++)
     {
         RGB[i * 3 + 0] = rgb[i * 3 + 1];
         RGB[i * 3 + 1] = rgb[i * 3 + 2];
